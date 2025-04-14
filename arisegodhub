@@ -1,0 +1,40 @@
+-- Jumpscare Script (LocalScript)
+
+local jumpscareImage = script.Parent:WaitForChild("JumpscareImage")
+local jumpscareSound = script.Parent:WaitForChild("JumpscareSound")
+
+jumpscareImage.Image = "rbxassetid://108394220981796"
+jumpscareSound.SoundId = "rbxassetid://6754147732"
+
+jumpscareImage.Visible = false
+jumpscareImage.ImageTransparency = 1
+
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local fadeTime = 0.3
+local displayTime = 2
+
+local function triggerJumpscare()
+	jumpscareImage.Visible = true
+	jumpscareSound:Play()
+
+	local fadeIn = TweenService:Create(jumpscareImage, TweenInfo.new(fadeTime), {ImageTransparency = 0})
+	fadeIn:Play()
+	fadeIn.Completed:Wait()
+
+	wait(displayTime)
+
+	local fadeOut = TweenService:Create(jumpscareImage, TweenInfo.new(fadeTime), {ImageTransparency = 1})
+	fadeOut:Play()
+	fadeOut.Completed:Wait()
+
+	jumpscareImage.Visible = false
+
+	wait(3) -- đợi 3 giây sau jumpscare
+
+	-- Gửi yêu cầu kick lên server
+	ReplicatedStorage:WaitForChild("KickPlayer"):FireServer("Bạn đã đạt cấp độ NOOB.")
+end
+
+ReplicatedStorage:WaitForChild("TriggerJumpscare").OnClientEvent:Connect(triggerJumpscare)
