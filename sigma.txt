@@ -1,0 +1,1938 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- ═══════════════════════════════════════════════════════════
+-- HÀM TIỆN ÍCH
+-- ═══════════════════════════════════════════════════════════
+
+local function formatNumber(num)
+	if num >= 1000000000000 then
+		return string.format("%.1fT", num / 1000000000000)
+	elseif num >= 1000000000 then
+		return string.format("%.1fB", num / 1000000000)
+	elseif num >= 1000000 then
+		return string.format("%.1fM", num / 1000000)
+	elseif num >= 1000 then
+		return string.format("%.1fK", num / 1000)
+	else
+		return tostring(math.floor(num))
+	end
+end
+
+local function createTween(instance, properties, time)
+	local tweenInfo = TweenInfo.new(time or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(instance, tweenInfo, properties)
+	return tween
+end
+
+local function shakeEffect(instance)
+	local originalPos = instance.Position
+	createTween(instance, {Position = originalPos + UDim2.new(0, -10, 0, 0)}, 0.05):Play()
+	wait(0.05)
+	createTween(instance, {Position = originalPos + UDim2.new(0, 10, 0, 0)}, 0.05):Play()
+	wait(0.05)
+	createTween(instance, {Position = originalPos}, 0.05):Play()
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- DỮ LIỆU GAME
+-- ═══════════════════════════════════════════════════════════
+
+local gameData = {
+	money = 0,
+	currentFish = nil,
+	equippedCharacters = {},
+	ownedCharacters = {"Ngư dân"},
+	equippedRod = "Cần tre",
+	ownedRods = {"Cần tre"},
+	equippedMagic = {},
+	ownedMagic = {},
+	isAutoFishing = false,
+	aliumTransform = false,
+	inventory = {},
+	questsCompleted = {},
+	fishKills = {}
+}
+
+-- DATABASE CÁ MỞ RỘNG (41 loại)
+local fishDatabase = {
+	-- CÁ THƯỜNG
+	{name = "Cá Rô", hp = 100, weight = 2, money = 50, kg = 0, sellPrice = 100},
+	{name = "Cá Chép", hp = 200, weight = 5, money = 150, kg = 0, sellPrice = 300},
+	{name = "Cá Trắm", hp = 500, weight = 10, money = 500, kg = 0, sellPrice = 1000},
+	{name = "Cá Lóc", hp = 1000, weight = 15, money = 1500, kg = 0, sellPrice = 3000},
+	{name = "Cá Sấu", hp = 5000, weight = 50, money = 10000, kg = 0, sellPrice = 20000},
+	{name = "Cá Hồi", hp = 8000, weight = 30, money = 15000, kg = 0, sellPrice = 30000},
+	{name = "Cá Ngừ", hp = 12000, weight = 80, money = 25000, kg = 0, sellPrice = 50000},
+	{name = "Cá Trích", hp = 3000, weight = 8, money = 5000, kg = 0, sellPrice = 10000},
+	{name = "Cá Hố", hp = 15000, weight = 60, money = 30000, kg = 0, sellPrice = 60000},
+	{name = "Cá Thu", hp = 7000, weight = 25, money = 12000, kg = 0, sellPrice = 24000},
+	
+	-- CÁ KHỔNG LỒ
+	{name = "Cá Voi Xanh", hp = 50000, weight = 500, money = 100000, type = "giant", kg = 5, sellPrice = 200000},
+	{name = "Cá Mập Trắng", hp = 100000, weight = 800, money = 500000, type = "giant", kg = 10, sellPrice = 1000000},
+	{name = "Cá Mập Búa", hp = 150000, weight = 700, money = 600000, type = "giant", kg = 15, sellPrice = 1200000},
+	{name = "Cá Voi Sát Thủ", hp = 200000, weight = 1000, money = 800000, type = "giant", kg = 20, sellPrice = 1600000},
+	{name = "Cá Sấu Khổng Lồ", hp = 250000, weight = 1200, money = 1000000, type = "giant", kg = 25, sellPrice = 2000000},
+	{name = "Cá Mập Hổ", hp = 300000, weight = 900, money = 1200000, type = "giant", kg = 30, sellPrice = 2400000},
+	{name = "Cá Rồng Biển", hp = 400000, weight = 1500, money = 1500000, type = "giant", kg = 35, sellPrice = 3000000},
+	{name = "Cá Mập Megalodon", hp = 500000, weight = 2000, money = 2000000, type = "giant", kg = 40, sellPrice = 4000000},
+	{name = "Cá Voi Xám", hp = 350000, weight = 1300, money = 1300000, type = "giant", kg = 32, sellPrice = 2600000},
+	{name = "Cá Heo Khổng Lồ", hp = 180000, weight = 600, money = 700000, type = "giant", kg = 18, sellPrice = 1400000},
+	
+	-- CÁ HUYỀN THOẠI
+	{name = "Rồng Biển Băng", hp = 1000000, weight = 3000, money = 5000000, type = "legendary", kg = 50, sellPrice = 10000000},
+	{name = "Phượng Hoàng Lửa", hp = 1500000, weight = 2500, money = 7000000, type = "legendary", kg = 60, sellPrice = 14000000},
+	{name = "Kỳ Lân Sóng", hp = 2000000, weight = 3500, money = 10000000, type = "legendary", kg = 70, sellPrice = 20000000},
+	{name = "Hổ Biển Vàng", hp = 2500000, weight = 4000, money = 15000000, type = "legendary", kg = 80, sellPrice = 30000000},
+	{name = "Rùa Huyền Vũ", hp = 3000000, weight = 5000, money = 20000000, type = "legendary", kg = 90, sellPrice = 40000000},
+	{name = "Bạch Hổ Thủy", hp = 3500000, weight = 4500, money = 25000000, type = "legendary", kg = 100, sellPrice = 50000000},
+	{name = "Chu Tước Thiên", hp = 4000000, weight = 3800, money = 30000000, type = "legendary", kg = 110, sellPrice = 60000000},
+	{name = "Thanh Long Hải", hp = 5000000, weight = 6000, money = 40000000, type = "legendary", kg = 120, sellPrice = 80000000},
+	
+	-- CÁ ĐẶC BIỆT
+	{name = "Tinh Thánh", hp = 10000000, weight = 8000, money = 50000000, type = "special", kg = 150, sellPrice = 100000000},
+	{name = "Alium", hp = 15000000, weight = 10000, money = 80000000, type = "special", kg = 180, sellPrice = 160000000},
+	{name = "Cá Thần Sấm", hp = 20000000, weight = 12000, money = 100000000, type = "special", kg = 200, sellPrice = 200000000},
+	{name = "Cá Ma Vương", hp = 30000000, weight = 15000, money = 150000000, type = "special", kg = 250, sellPrice = 300000000},
+	{name = "Cá Thánh Linh", hp = 50000000, weight = 20000, money = 250000000, type = "special", kg = 300, sellPrice = 500000000},
+	{name = "Cá Hỗn Độn", hp = 80000000, weight = 25000, money = 400000000, type = "special", kg = 350, sellPrice = 800000000},
+	{name = "Cá Thái Cổ", hp = 100000000, weight = 30000, money = 500000000, type = "special", kg = 400, sellPrice = 1000000000},
+	{name = "Cá Vũ Trụ", hp = 150000000, weight = 40000, money = 800000000, type = "special", kg = 500, sellPrice = 1600000000},
+	{name = "Cá Thần Thoại", hp = 250000000, weight = 50000, money = 1200000000, type = "special", kg = 600, sellPrice = 2400000000},
+	{name = "Cá Vô Cực", hp = 500000000, weight = 80000, money = 2000000000, type = "special", kg = 800, sellPrice = 4000000000},
+	{name = "Cá Tối Thượng", hp = 1000000000, weight = 100000, money = 5000000000, type = "special", kg = 1000, sellPrice = 10000000000},
+	{name = "Cá Chí Tôn", hp = 5000000000, weight = 200000, money = 20000000000, type = "special", kg = 1500, sellPrice = 40000000000},
+	{name = "Cá Vạn Cổ Đế Tôn", hp = 10000000000, weight = 500000, money = 100000000000, type = "special", kg = 2000, sellPrice = 200000000000}
+}
+
+-- DATABASE NHÂN VẬT MỞ RỘNG (30 nhân vật)
+local characterDatabase = {
+	{name = "Ngư dân", cost = 0, multiplier = 1, hp = 100},
+	{name = "Ân Tá", cost = 300000000, multiplier = 2, hp = 200},
+	{name = "Lan Tâm", cost = 500000000, multiplier = 4, hp = 400},
+	{name = "Lan Đào", cost = 750000000, multiplier = 6, hp = 600},
+	{name = "Đào Ái", cost = 900000000, multiplier = 10, hp = 1000},
+	{name = "An Thành", cost = 1200000000, multiplier = 15, hp = 1500},
+	{name = "Giang Lão", cost = 1500000000, multiplier = 17, hp = 1700},
+	{name = "Lan J97", cost = 2000000000, multiplier = 20, hp = 2000},
+	{name = "Long Điếu Thiên", cost = 5000000000, multiplier = 30, hp = 3000},
+	{name = "Trăm Hào", cost = 10000000000, multiplier = 50, hp = 5000},
+	{name = "Lão Tổ Họ Lan", cost = 100000000000, multiplier = 100, hp = 10000},
+	
+	-- NHÂN VẬT QUEST
+	{name = "Thần Biển Poseidon", cost = 0, multiplier = 150, hp = 15000, quest = "Cá Voi Xanh", kills = 10},
+	{name = "Sát Thủ Mập", cost = 0, multiplier = 200, hp = 20000, quest = "Cá Mập Trắng", kills = 15},
+	{name = "Pháp Sư Băng", cost = 0, multiplier = 250, hp = 25000, quest = "Rồng Biển Băng", kills = 5},
+	{name = "Chiến Thần Lửa", cost = 0, multiplier = 300, hp = 30000, quest = "Phượng Hoàng Lửa", kills = 5},
+	{name = "Hoàng Đế Đại Dương", cost = 0, multiplier = 400, hp = 40000, quest = "Kỳ Lân Sóng", kills = 3},
+	{name = "Thiên Tôn Thủy", cost = 0, multiplier = 500, hp = 50000, quest = "Tinh Thánh", kills = 5},
+	{name = "Ma Đế Hắc Ám", cost = 0, multiplier = 600, hp = 60000, quest = "Cá Ma Vương", kills = 3},
+	{name = "Thánh Vương Ánh Sáng", cost = 0, multiplier = 700, hp = 70000, quest = "Cá Thánh Linh", kills = 2},
+	{name = "Hỗn Độn Chi Chủ", cost = 0, multiplier = 800, hp = 80000, quest = "Cá Hỗn Độn", kills = 2},
+	{name = "Vũ Trụ Đại Đế", cost = 0, multiplier = 1000, hp = 100000, quest = "Cá Vũ Trụ", kills = 1},
+	{name = "Thần Thoại Chi Tổ", cost = 0, multiplier = 1200, hp = 120000, quest = "Cá Thần Thoại", kills = 1},
+	{name = "Vô Cực Tiên Tôn", cost = 0, multiplier = 1500, hp = 150000, quest = "Cá Vô Cực", kills = 1},
+	{name = "Chí Tôn Vô Thượng", cost = 0, multiplier = 2000, hp = 200000, quest = "Cá Chí Tôn", kills = 1},
+	{name = "Vạn Cổ Đại Đế", cost = 0, multiplier = 3000, hp = 300000, quest = "Cá Vạn Cổ Đế Tôn", kills = 1},
+	
+	-- NHÂN VẬT ĐẶC BIỆT MUA BẰNG TIỀN
+	{name = "Thợ Săn Rồng", cost = 500000000000, multiplier = 350, hp = 35000},
+	{name = "Vua Hải Tặc", cost = 1000000000000, multiplier = 450, hp = 45000},
+	{name = "Tiên Nhân Câu Cá", cost = 5000000000000, multiplier = 550, hp = 55000},
+	{name = "Thần Nông", cost = 10000000000000, multiplier = 650, hp = 65000},
+	{name = "Ngọc Hoàng", cost = 50000000000000, multiplier = 900, hp = 90000}
+}
+
+-- DATABASE CẦN CÂU MỞ RỘNG (25 loại)
+local rodDatabase = {
+	{name = "Cần tre", cost = 0, damage = 10, durability = 100, maxKg = 10},
+	{name = "Cần gỗ", cost = 1000, damage = 25, durability = 200, maxKg = 20},
+	{name = "Cần sắt", cost = 10000, damage = 50, durability = 500, maxKg = 50},
+	{name = "Cần thép", cost = 100000, damage = 100, durability = 1000, maxKg = 100},
+	{name = "Cần titan", cost = 1000000, damage = 250, durability = 2500, maxKg = 200},
+	{name = "Cần kim cương", cost = 10000000, damage = 500, durability = 5000, maxKg = 350},
+	{name = "Cần huyền thiết", cost = 100000000, damage = 1000, durability = 10000, maxKg = 500},
+	{name = "Cần thiên thạch", cost = 1000000000, damage = 2500, durability = 25000, maxKg = 800},
+	{name = "Cần long lân", cost = 10000000000, damage = 5000, durability = 50000, maxKg = 1200},
+	{name = "Cần phượng hoàng", cost = 100000000000, damage = 10000, durability = 100000, maxKg = 1800},
+	{name = "Cần thần thoại", cost = 1000000000000, damage = 25000, durability = 250000, maxKg = 2500},
+	{name = "Cần vạn cổ", cost = 10000000000000, damage = 50000, durability = 500000, maxKg = 3500},
+	{name = "Cần hỗn độn", cost = 100000000000000, damage = 100000, durability = 1000000, maxKg = 5000},
+	{name = "Cần thái cổ", cost = 500000000000000, damage = 250000, durability = 2500000, maxKg = 8000},
+	{name = "Cần vô cực", cost = 1000000000000000, damage = 500000, durability = 5000000, maxKg = 12000},
+	{name = "Cần tối thượng", cost = 5000000000000000, damage = 1000000, durability = 10000000, maxKg = 18000},
+	{name = "Cần chí tôn", cost = 10000000000000000, damage = 2500000, durability = 25000000, maxKg = 25000},
+	{name = "Cần thiên đế", cost = 50000000000000000, damage = 5000000, durability = 50000000, maxKg = 35000},
+	{name = "Cần ma đế", cost = 100000000000000000, damage = 10000000, durability = 100000000, maxKg = 50000},
+	{name = "Cần thánh vương", cost = 500000000000000000, damage = 25000000, durability = 250000000, maxKg = 80000},
+	{name = "Cần vạn kiếp", cost = 1000000000000000000, damage = 50000000, durability = 500000000, maxKg = 120000},
+	{name = "Cần bất diệt", cost = 5000000000000000000, damage = 100000000, durability = 1000000000, maxKg = 180000},
+	{name = "Cần vĩnh hằng", cost = 10000000000000000000, damage = 250000000, durability = 2500000000, maxKg = 250000},
+	{name = "Cần tạo hóa", cost = 50000000000000000000, damage = 500000000, durability = 5000000000, maxKg = 350000},
+	{name = "Cần vạn cổ đế", cost = 100000000000000000000, damage = 1000000000, durability = 10000000000, maxKg = 500000}
+}
+
+-- DATABASE ĐIẾU PHÁP MỞ RỘNG (50 loại)
+local magicDatabase = {
+	{name = "Hỏa Cầu Thuật", cost = 1000000, damage = 100},
+	{name = "Băng Phong", cost = 5000000, damage = 250},
+	{name = "Lôi Điện", cost = 10000000, damage = 500},
+	{name = "Thổ Linh", cost = 50000000, damage = 1000},
+	{name = "Mộc Tinh", cost = 100000000, damage = 2000},
+	{name = "Kim Quang", cost = 500000000, damage = 4000},
+	{name = "Thủy Long", cost = 1000000000, damage = 8000},
+	{name = "Phong Thần", cost = 5000000000, damage = 16000},
+	{name = "Huyền Vũ", cost = 10000000000, damage = 32000},
+	{name = "Chu Tước", cost = 50000000000, damage = 64000},
+	{name = "Thanh Long", cost = 100000000000, damage = 128000},
+	{name = "Bạch Hổ", cost = 500000000000, damage = 256000},
+	{name = "Cửu Thiên", cost = 1000000000000, damage = 512000},
+	{name = "Vạn Kiếm", cost = 5000000000000, damage = 1024000},
+	{name = "Thiên Địa", cost = 10000000000000, damage = 2048000},
+	{name = "Nhật Nguyệt", cost = 50000000000000, damage = 4096000},
+	{name = "Tinh Vân", cost = 100000000000000, damage = 8192000},
+	{name = "Vũ Trụ", cost = 500000000000000, damage = 16384000},
+	{name = "Hỗn Độn", cost = 1000000000000000, damage = 32768000},
+	{name = "Thái Cực", cost = 5000000000000000, damage = 65536000},
+	{name = "Vô Cực", cost = 10000000000000000, damage = 131072000},
+	
+	-- ĐIẾU PHÁP CẤP CAO
+	{name = "Âm Dương Ngư Chuyển", cost = 50000000000000000, damage = 262144000},
+	{name = "Ngũ Hành Đại Trận", cost = 100000000000000000, damage = 524288000},
+	{name = "Bát Quái Phong Vân", cost = 500000000000000000, damage = 1048576000},
+	{name = "Thất Tinh Liên Châu", cost = 1000000000000000000, damage = 2097152000},
+	{name = "Lục Đạo Luân Hồi", cost = 5000000000000000000, damage = 4194304000},
+	{name = "Thiên Cương Địa Sát", cost = 10000000000000000000, damage = 8388608000},
+	{name = "Vạn Pháp Quy Tông", cost = 50000000000000000000, damage = 16777216000},
+	{name = "Hồng Hoang Chi Lực", cost = 100000000000000000000, damage = 33554432000},
+	{name = "Khai Thiên Tích Địa", cost = 500000000000000000000, damage = 67108864000},
+	
+	-- ĐIẾU PHÁP SIÊU CẤP
+	{name = "Thời Gian Tĩnh Chỉ", cost = 1000000000000000000000, damage = 134217728000},
+	{name = "Không Gian Hủy Diệt", cost = 5000000000000000000000, damage = 268435456000},
+	{name = "Nhân Quả Đảo Ngược", cost = 10000000000000000000000, damage = 536870912000},
+	{name = "Mệnh Vận Chi Luân", cost = 50000000000000000000000, damage = 1073741824000},
+	{name = "Linh Hồn Thiêu Đốt", cost = 100000000000000000000000, damage = 2147483648000},
+	{name = "Vạn Kiếp Bất Ma", cost = 500000000000000000000000, damage = 4294967296000},
+	{name = "Thần Ma Đồng Tu", cost = 1000000000000000000000000, damage = 8589934592000},
+	{name = "Bất Diệt Chi Thân", cost = 5000000000000000000000000, damage = 17179869184000},
+	{name = "Vĩnh Hằng Chi Lực", cost = 10000000000000000000000000, damage = 34359738368000},
+	{name = "Tạo Hóa Chi Thần", cost = 50000000000000000000000000, damage = 68719476736000},
+	
+	-- ĐIẾU PHÁP TUYỆT ĐỈNH
+	{name = "Chân Lý Chi Đạo", cost = 100000000000000000000000000, damage = 137438953472000},
+	{name = "Vạn Đạo Qui Nhất", cost = 500000000000000000000000000, damage = 274877906944000},
+	{name = "Thiên Đạo Chi Ngoại", cost = 1000000000000000000000000000, damage = 549755813888000},
+	{name = "Siêu Việt Chi Cảnh", cost = 5000000000000000000000000000, damage = 1099511627776000},
+	{name = "Chí Cao Vô Thượng", cost = 10000000000000000000000000000, damage = 2199023255552000},
+	{name = "Vô Song Đế Thuật", cost = 50000000000000000000000000000, damage = 4398046511104000},
+	{name = "Tuyệt Đại Thần Thông", cost = 100000000000000000000000000000, damage = 8796093022208000},
+	{name = "Bá Đạo Thiên Hạ", cost = 500000000000000000000000000000, damage = 17592186044416000},
+	{name = "Vạn Cổ Đệ Nhất", cost = 1000000000000000000000000000000, damage = 35184372088832000}
+}
+
+-- ═══════════════════════════════════════════════════════════
+-- TẠO GUI CHÍNH
+-- ═══════════════════════════════════════════════════════════
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FishingGameUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+-- Container chính
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(1, 0, 1, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+-- Header
+local headerFrame = Instance.new("Frame")
+headerFrame.Size = UDim2.new(1, 0, 0.1, 0)
+headerFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+headerFrame.BorderSizePixel = 0
+headerFrame.Parent = mainFrame
+
+local headerCorner = Instance.new("UICorner")
+headerCorner.CornerRadius = UDim.new(0, 10)
+headerCorner.Parent = headerFrame
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(0.3, 0, 1, 0)
+titleLabel.Position = UDim2.new(0.05, 0, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "🎣 CÂU CÁ VẠN CÂN"
+titleLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextScaled = true
+titleLabel.Parent = headerFrame
+
+local moneyLabel = Instance.new("TextLabel")
+moneyLabel.Size = UDim2.new(0.25, 0, 0.6, 0)
+moneyLabel.Position = UDim2.new(0.7, 0, 0.2, 0)
+moneyLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+moneyLabel.Text = "💰 0"
+moneyLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+moneyLabel.Font = Enum.Font.GothamBold
+moneyLabel.TextScaled = true
+moneyLabel.Parent = headerFrame
+
+local moneyCorner = Instance.new("UICorner")
+moneyCorner.CornerRadius = UDim.new(0, 15)
+moneyCorner.Parent = moneyLabel
+
+local moneyStroke = Instance.new("UIStroke")
+moneyStroke.Color = Color3.fromRGB(255, 215, 0)
+moneyStroke.Thickness = 2
+moneyStroke.Parent = moneyLabel
+
+-- Navigation Buttons
+local navFrame = Instance.new("Frame")
+navFrame.Size = UDim2.new(1, 0, 0.08, 0)
+navFrame.Position = UDim2.new(0, 0, 0.1, 0)
+navFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+navFrame.BorderSizePixel = 0
+navFrame.Parent = mainFrame
+
+local tabs = {"Câu Cá", "Nhân Vật", "Cần Câu", "Điếu Pháp", "Cửa Hàng", "Nhiệm Vụ"}
+local tabButtons = {}
+local contentFrames = {}
+
+for i, tabName in ipairs(tabs) do
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(0.15, 0, 0.8, 0)
+	button.Position = UDim2.new(0.02 + (i-1) * 0.16, 0, 0.1, 0)
+	button.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+	button.Text = tabName
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.Font = Enum.Font.GothamBold
+	button.TextScaled = true
+	button.Parent = navFrame
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = button
+	
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 215, 0)
+	stroke.Thickness = 2
+	stroke.Parent = button
+	
+	tabButtons[tabName] = button
+	
+	-- Content Frame cho mỗi tab
+	local contentFrame = Instance.new("Frame")
+	contentFrame.Size = UDim2.new(1, 0, 0.82, 0)
+	contentFrame.Position = UDim2.new(0, 0, 0.18, 0)
+	contentFrame.BackgroundTransparency = 1
+	contentFrame.Visible = (i == 1)
+	contentFrame.Parent = mainFrame
+	
+	contentFrames[tabName] = contentFrame
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- TAB CÂU CÁ
+-- ═══════════════════════════════════════════════════════════
+
+local fishingFrame = contentFrames["Câu Cá"]
+
+-- Fish Display
+local fishDisplayFrame = Instance.new("Frame")
+fishDisplayFrame.Size = UDim2.new(0.6, 0, 0.4, 0)
+fishDisplayFrame.Position = UDim2.new(0.2, 0, 0.05, 0)
+fishDisplayFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+fishDisplayFrame.Parent = fishingFrame
+
+local fishCorner = Instance.new("UICorner")
+fishCorner.CornerRadius = UDim.new(0, 15)
+fishCorner.Parent = fishDisplayFrame
+
+local fishStroke = Instance.new("UIStroke")
+fishStroke.Color = Color3.fromRGB(255, 215, 0)
+fishStroke.Thickness = 3
+fishStroke.Parent = fishDisplayFrame
+
+local fishNameLabel = Instance.new("TextLabel")
+fishNameLabel.Size = UDim2.new(1, 0, 0.2, 0)
+fishNameLabel.Position = UDim2.new(0, 0, 0.05, 0)
+fishNameLabel.BackgroundTransparency = 1
+fishNameLabel.Text = "🐟 Đang câu..."
+fishNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+fishNameLabel.Font = Enum.Font.GothamBold
+fishNameLabel.TextScaled = true
+fishNameLabel.Parent = fishDisplayFrame
+
+local fishWeightLabel = Instance.new("TextLabel")
+fishWeightLabel.Size = UDim2.new(0.5, 0, 0.12, 0)
+fishWeightLabel.Position = UDim2.new(0, 0, 0.27, 0)
+fishWeightLabel.BackgroundTransparency = 1
+fishWeightLabel.Text = "⚖️ Cân nặng: 0 kg"
+fishWeightLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+fishWeightLabel.Font = Enum.Font.Gotham
+fishWeightLabel.TextScaled = true
+fishWeightLabel.Parent = fishDisplayFrame
+
+local fishKgLabel = Instance.new("TextLabel")
+fishKgLabel.Size = UDim2.new(0.5, 0, 0.12, 0)
+fishKgLabel.Position = UDim2.new(0.5, 0, 0.27, 0)
+fishKgLabel.BackgroundTransparency = 1
+fishKgLabel.Text = "🎣 Yêu cầu: 0 kg"
+fishKgLabel.TextColor3 = Color3.fromRGB(255, 150, 50)
+fishKgLabel.Font = Enum.Font.Gotham
+fishKgLabel.TextScaled = true
+fishKgLabel.Parent = fishDisplayFrame
+
+-- HP Bar Background
+local hpBarBg = Instance.new("Frame")
+hpBarBg.Size = UDim2.new(0.9, 0, 0.12, 0)
+hpBarBg.Position = UDim2.new(0.05, 0, 0.48, 0)
+hpBarBg.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+hpBarBg.Parent = fishDisplayFrame
+
+local hpBarCorner = Instance.new("UICorner")
+hpBarCorner.CornerRadius = UDim.new(0, 8)
+hpBarCorner.Parent = hpBarBg
+
+-- HP Bar Fill
+local hpBarFill = Instance.new("Frame")
+hpBarFill.Size = UDim2.new(1, 0, 1, 0)
+hpBarFill.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+hpBarFill.BorderSizePixel = 0
+hpBarFill.Parent = hpBarBg
+
+local hpBarFillCorner = Instance.new("UICorner")
+hpBarFillCorner.CornerRadius = UDim.new(0, 8)
+hpBarFillCorner.Parent = hpBarFill
+
+local hpTextLabel = Instance.new("TextLabel")
+hpTextLabel.Size = UDim2.new(1, 0, 1, 0)
+hpTextLabel.BackgroundTransparency = 1
+hpTextLabel.Text = "HP: 0/0"
+hpTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+hpTextLabel.Font = Enum.Font.GothamBold
+hpTextLabel.TextScaled = true
+hpTextLabel.Parent = hpBarBg
+
+local damageLabel = Instance.new("TextLabel")
+damageLabel.Size = UDim2.new(1, 0, 0.15, 0)
+damageLabel.Position = UDim2.new(0, 0, 0.7, 0)
+damageLabel.BackgroundTransparency = 1
+damageLabel.Text = "⚔️ Dame: 10"
+damageLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+damageLabel.Font = Enum.Font.GothamBold
+damageLabel.TextScaled = true
+damageLabel.Parent = fishDisplayFrame
+
+-- Nút XOAY CẦN (Tròn)
+local fishButton = Instance.new("TextButton")
+fishButton.Size = UDim2.new(0.25, 0, 0.25, 0)
+fishButton.Position = UDim2.new(0.375, 0, 0.55, 0)
+fishButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+fishButton.Text = "🎣\nXOAY CẦN"
+fishButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+fishButton.Font = Enum.Font.GothamBold
+fishButton.TextScaled = true
+fishButton.Parent = fishingFrame
+
+local fishButtonCorner = Instance.new("UICorner")
+fishButtonCorner.CornerRadius = UDim.new(1, 0)
+fishButtonCorner.Parent = fishButton
+
+local fishButtonStroke = Instance.new("UIStroke")
+fishButtonStroke.Color = Color3.fromRGB(255, 215, 0)
+fishButtonStroke.Thickness = 4
+fishButtonStroke.Parent = fishButton
+
+-- Mini Map
+local miniMapFrame = Instance.new("Frame")
+miniMapFrame.Size = UDim2.new(0.35, 0, 0.3, 0)
+miniMapFrame.Position = UDim2.new(0.62, 0, 0.65, 0)
+miniMapFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+miniMapFrame.Parent = fishingFrame
+
+local miniMapCorner = Instance.new("UICorner")
+miniMapCorner.CornerRadius = UDim.new(0, 15)
+miniMapCorner.Parent = miniMapFrame
+
+local miniMapStroke = Instance.new("UIStroke")
+miniMapStroke.Color = Color3.fromRGB(255, 215, 0)
+miniMapStroke.Thickness = 2
+miniMapStroke.Parent = miniMapFrame
+
+local miniMapTitle = Instance.new("TextLabel")
+miniMapTitle.Size = UDim2.new(1, 0, 0.2, 0)
+miniMapTitle.BackgroundTransparency = 1
+miniMapTitle.Text = "🗺️ BẢN ĐỒ CÁ"
+miniMapTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+miniMapTitle.Font = Enum.Font.GothamBold
+miniMapTitle.TextScaled = true
+miniMapTitle.Parent = miniMapFrame
+
+local miniMapScroll = Instance.new("ScrollingFrame")
+miniMapScroll.Size = UDim2.new(0.95, 0, 0.75, 0)
+miniMapScroll.Position = UDim2.new(0.025, 0, 0.23, 0)
+miniMapScroll.BackgroundTransparency = 1
+miniMapScroll.ScrollBarThickness = 6
+miniMapScroll.Parent = miniMapFrame
+
+local miniMapList = Instance.new("UIListLayout")
+miniMapList.Padding = UDim.new(0, 3)
+miniMapList.Parent = miniMapScroll
+
+-- ═══════════════════════════════════════════════════════════
+-- TAB NHÂN VẬT
+-- ═══════════════════════════════════════════════════════════
+
+local characterFrame = contentFrames["Nhân Vật"]
+
+-- Equipped Characters Display
+local equippedFrame = Instance.new("Frame")
+equippedFrame.Size = UDim2.new(0.95, 0, 0.25, 0)
+equippedFrame.Position = UDim2.new(0.025, 0, 0.02, 0)
+equippedFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+equippedFrame.Parent = characterFrame
+
+local equippedCorner = Instance.new("UICorner")
+equippedCorner.CornerRadius = UDim.new(0, 15)
+equippedCorner.Parent = equippedFrame
+
+local equippedStroke = Instance.new("UIStroke")
+equippedStroke.Color = Color3.fromRGB(255, 215, 0)
+equippedStroke.Thickness = 2
+equippedStroke.Parent = equippedFrame
+
+local equippedTitle = Instance.new("TextLabel")
+equippedTitle.Size = UDim2.new(1, 0, 0.25, 0)
+equippedTitle.BackgroundTransparency = 1
+equippedTitle.Text = "👥 NHÂN VẬT TRANG BỊ (Tối đa 3)"
+equippedTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+equippedTitle.Font = Enum.Font.GothamBold
+equippedTitle.TextScaled = true
+equippedTitle.Parent = equippedFrame
+
+local equippedSlotsFrame = Instance.new("Frame")
+equippedSlotsFrame.Size = UDim2.new(1, 0, 0.7, 0)
+equippedSlotsFrame.Position = UDim2.new(0, 0, 0.28, 0)
+equippedSlotsFrame.BackgroundTransparency = 1
+equippedSlotsFrame.Parent = equippedFrame
+
+local equippedSlots = {}
+for i = 1, 3 do
+	local slot = Instance.new("Frame")
+	slot.Size = UDim2.new(0.3, 0, 0.9, 0)
+	slot.Position = UDim2.new(0.05 + (i-1) * 0.32, 0, 0.05, 0)
+	slot.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+	slot.Parent = equippedSlotsFrame
+	
+	local slotCorner = Instance.new("UICorner")
+	slotCorner.CornerRadius = UDim.new(0, 12)
+	slotCorner.Parent = slot
+	
+	local slotLabel = Instance.new("TextLabel")
+	slotLabel.Size = UDim2.new(1, 0, 0.5, 0)
+	slotLabel.BackgroundTransparency = 1
+	slotLabel.Text = "Trống"
+	slotLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+	slotLabel.Font = Enum.Font.Gotham
+	slotLabel.TextScaled = true
+	slotLabel.Parent = slot
+	
+	local hpLabel = Instance.new("TextLabel")
+	hpLabel.Size = UDim2.new(1, 0, 0.3, 0)
+	hpLabel.Position = UDim2.new(0, 0, 0.6, 0)
+	hpLabel.BackgroundTransparency = 1
+	hpLabel.Text = ""
+	hpLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	hpLabel.Font = Enum.Font.Gotham
+	hpLabel.TextScaled = true
+	hpLabel.Parent = slot
+	
+	equippedSlots[i] = {frame = slot, label = slotLabel, hpLabel = hpLabel}
+end
+
+-- Shop Characters
+local charShopScroll = Instance.new("ScrollingFrame")
+charShopScroll.Size = UDim2.new(0.95, 0, 0.68, 0)
+charShopScroll.Position = UDim2.new(0.025, 0, 0.3, 0)
+charShopScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+charShopScroll.ScrollBarThickness = 8
+charShopScroll.Parent = characterFrame
+
+local charShopCorner = Instance.new("UICorner")
+charShopCorner.CornerRadius = UDim.new(0, 15)
+charShopCorner.Parent = charShopScroll
+
+local charShopList = Instance.new("UIListLayout")
+charShopList.Padding = UDim.new(0, 10)
+charShopList.Parent = charShopScroll
+
+-- ═══════════════════════════════════════════════════════════
+-- TAB CẦN CÂU
+-- ═══════════════════════════════════════════════════════════
+
+local rodFrame = contentFrames["Cần Câu"]
+
+-- Equipped Rod Display
+local equippedRodFrame = Instance.new("Frame")
+equippedRodFrame.Size = UDim2.new(0.95, 0, 0.2, 0)
+equippedRodFrame.Position = UDim2.new(0.025, 0, 0.02, 0)
+equippedRodFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+equippedRodFrame.Parent = rodFrame
+
+local equippedRodCorner = Instance.new("UICorner")
+equippedRodCorner.CornerRadius = UDim.new(0, 15)
+equippedRodCorner.Parent = equippedRodFrame
+
+local equippedRodStroke = Instance.new("UIStroke")
+equippedRodStroke.Color = Color3.fromRGB(255, 215, 0)
+equippedRodStroke.Thickness = 2
+equippedRodStroke.Parent = equippedRodFrame
+
+local equippedRodLabel = Instance.new("TextLabel")
+equippedRodLabel.Size = UDim2.new(1, 0, 0.4, 0)
+equippedRodLabel.Position = UDim2.new(0, 0, 0.1, 0)
+equippedRodLabel.BackgroundTransparency = 1
+equippedRodLabel.Text = "🎣 CẦN ĐANG DÙNG: Cần tre"
+equippedRodLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+equippedRodLabel.Font = Enum.Font.GothamBold
+equippedRodLabel.TextScaled = true
+equippedRodLabel.Parent = equippedRodFrame
+
+local equippedRodStats = Instance.new("TextLabel")
+equippedRodStats.Size = UDim2.new(1, 0, 0.35, 0)
+equippedRodStats.Position = UDim2.new(0, 0, 0.55, 0)
+equippedRodStats.BackgroundTransparency = 1
+equippedRodStats.Text = "⚔️ Dame: 10 | 🛡️ Độ bền: 100 | 🎣 Max: 10kg"
+equippedRodStats.TextColor3 = Color3.fromRGB(200, 200, 200)
+equippedRodStats.Font = Enum.Font.Gotham
+equippedRodStats.TextScaled = true
+equippedRodStats.Parent = equippedRodFrame
+
+-- Shop Rods
+local rodShopScroll = Instance.new("ScrollingFrame")
+rodShopScroll.Size = UDim2.new(0.95, 0, 0.73, 0)
+rodShopScroll.Position = UDim2.new(0.025, 0, 0.25, 0)
+rodShopScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+rodShopScroll.ScrollBarThickness = 8
+rodShopScroll.Parent = rodFrame
+
+local rodShopCorner = Instance.new("UICorner")
+rodShopCorner.CornerRadius = UDim.new(0, 15)
+rodShopCorner.Parent = rodShopScroll
+
+local rodShopList = Instance.new("UIListLayout")
+rodShopList.Padding = UDim.new(0, 10)
+rodShopList.Parent = rodShopScroll
+
+-- ═══════════════════════════════════════════════════════════
+-- TAB ĐIẾU PHÁP
+-- ═══════════════════════════════════════════════════════════
+
+local magicFrame = contentFrames["Điếu Pháp"]
+
+-- Equipped Magic Display (4 ô vuông)
+local equippedMagicFrame = Instance.new("Frame")
+equippedMagicFrame.Size = UDim2.new(0.3, 0, 0.95, 0)
+equippedMagicFrame.Position = UDim2.new(0.68, 0, 0.02, 0)
+equippedMagicFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+equippedMagicFrame.Parent = magicFrame
+
+local equippedMagicCorner = Instance.new("UICorner")
+equippedMagicCorner.CornerRadius = UDim.new(0, 15)
+equippedMagicCorner.Parent = equippedMagicFrame
+
+local equippedMagicStroke = Instance.new("UIStroke")
+equippedMagicStroke.Color = Color3.fromRGB(255, 215, 0)
+equippedMagicStroke.Thickness = 2
+equippedMagicStroke.Parent = equippedMagicFrame
+
+local equippedMagicTitle = Instance.new("TextLabel")
+equippedMagicTitle.Size = UDim2.new(1, 0, 0.08, 0)
+equippedMagicTitle.BackgroundTransparency = 1
+equippedMagicTitle.Text = "✨ TRANG BỊ"
+equippedMagicTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+equippedMagicTitle.Font = Enum.Font.GothamBold
+equippedMagicTitle.TextScaled = true
+equippedMagicTitle.Parent = equippedMagicFrame
+
+local magicSlots = {}
+for i = 1, 4 do
+	local row = math.ceil(i / 2)
+	local col = (i - 1) % 2
+	
+	local slot = Instance.new("Frame")
+	slot.Size = UDim2.new(0.42, 0, 0.2, 0)
+	slot.Position = UDim2.new(0.08 + col * 0.5, 0, 0.12 + (row - 1) * 0.23, 0)
+	slot.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	slot.Parent = equippedMagicFrame
+	
+	local slotCorner = Instance.new("UICorner")
+	slotCorner.CornerRadius = UDim.new(0, 12)
+	slotCorner.Parent = slot
+	
+	local slotStroke = Instance.new("UIStroke")
+	slotStroke.Color = Color3.fromRGB(100, 100, 120)
+	slotStroke.Thickness = 2
+	slotStroke.Parent = slot
+	
+	local slotLabel = Instance.new("TextLabel")
+	slotLabel.Size = UDim2.new(1, 0, 0.5, 0)
+	slotLabel.BackgroundTransparency = 1
+	slotLabel.Text = "Trống"
+	slotLabel.TextColor3 = Color3.fromRGB(100, 100, 120)
+	slotLabel.Font = Enum.Font.Gotham
+	slotLabel.TextScaled = true
+	slotLabel.Parent = slot
+	
+	local damageLabel = Instance.new("TextLabel")
+	damageLabel.Size = UDim2.new(1, 0, 0.35, 0)
+	damageLabel.Position = UDim2.new(0, 0, 0.6, 0)
+	damageLabel.BackgroundTransparency = 1
+	damageLabel.Text = ""
+	damageLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	damageLabel.Font = Enum.Font.Gotham
+	damageLabel.TextScaled = true
+	damageLabel.Parent = slot
+	
+	magicSlots[i] = {frame = slot, label = slotLabel, damageLabel = damageLabel}
+end
+
+-- Shop Magic
+local magicShopScroll = Instance.new("ScrollingFrame")
+magicShopScroll.Size = UDim2.new(0.65, 0, 0.95, 0)
+magicShopScroll.Position = UDim2.new(0.02, 0, 0.02, 0)
+magicShopScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+magicShopScroll.ScrollBarThickness = 8
+magicShopScroll.Parent = magicFrame
+
+local magicShopCorner = Instance.new("UICorner")
+magicShopCorner.CornerRadius = UDim.new(0, 15)
+magicShopCorner.Parent = magicShopScroll
+
+local magicShopList = Instance.new("UIListLayout")
+magicShopList.Padding = UDim.new(0, 10)
+magicShopList.Parent = magicShopScroll
+
+-- ═══════════════════════════════════════════════════════════
+-- TAB CỬA HÀNG (BÁN CÁ)
+-- ═══════════════════════════════════════════════════════════
+
+local shopFrame = contentFrames["Cửa Hàng"]
+
+local shopTitle = Instance.new("TextLabel")
+shopTitle.Size = UDim2.new(0.95, 0, 0.1, 0)
+shopTitle.Position = UDim2.new(0.025, 0, 0.02, 0)
+shopTitle.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+shopTitle.Text = "🏪 CỬA HÀNG BÁN CÁ"
+shopTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+shopTitle.Font = Enum.Font.GothamBold
+shopTitle.TextScaled = true
+shopTitle.Parent = shopFrame
+
+local shopTitleCorner = Instance.new("UICorner")
+shopTitleCorner.CornerRadius = UDim.new(0, 15)
+shopTitleCorner.Parent = shopTitle
+
+local shopTitleStroke = Instance.new("UIStroke")
+shopTitleStroke.Color = Color3.fromRGB(255, 215, 0)
+shopTitleStroke.Thickness = 2
+shopTitleStroke.Parent = shopTitle
+
+local inventoryScroll = Instance.new("ScrollingFrame")
+inventoryScroll.Size = UDim2.new(0.95, 0, 0.83, 0)
+inventoryScroll.Position = UDim2.new(0.025, 0, 0.14, 0)
+inventoryScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+inventoryScroll.ScrollBarThickness = 8
+inventoryScroll.Parent = shopFrame
+
+local inventoryCorner = Instance.new("UICorner")
+inventoryCorner.CornerRadius = UDim.new(0, 15)
+inventoryCorner.Parent = inventoryScroll
+
+local inventoryList = Instance.new("UIListLayout")
+inventoryList.Padding = UDim.new(0, 10)
+inventoryList.Parent = inventoryScroll
+
+-- ═══════════════════════════════════════════════════════════
+-- TAB NHIỆM VỤ
+-- ═══════════════════════════════════════════════════════════
+
+local questFrame = contentFrames["Nhiệm Vụ"]
+
+local questTitle = Instance.new("TextLabel")
+questTitle.Size = UDim2.new(0.95, 0, 0.1, 0)
+questTitle.Position = UDim2.new(0.025, 0, 0.02, 0)
+questTitle.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+questTitle.Text = "📜 NHIỆM VỤ NHÂN VẬT"
+questTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+questTitle.Font = Enum.Font.GothamBold
+questTitle.TextScaled = true
+questTitle.Parent = questFrame
+
+local questTitleCorner = Instance.new("UICorner")
+questTitleCorner.CornerRadius = UDim.new(0, 15)
+questTitleCorner.Parent = questTitle
+
+local questTitleStroke = Instance.new("UIStroke")
+questTitleStroke.Color = Color3.fromRGB(255, 215, 0)
+questTitleStroke.Thickness = 2
+questTitleStroke.Parent = questTitle
+
+local questScroll = Instance.new("ScrollingFrame")
+questScroll.Size = UDim2.new(0.95, 0, 0.83, 0)
+questScroll.Position = UDim2.new(0.025, 0, 0.14, 0)
+questScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+questScroll.ScrollBarThickness = 8
+questScroll.Parent = questFrame
+
+local questScrollCorner = Instance.new("UICorner")
+questScrollCorner.CornerRadius = UDim.new(0, 15)
+questScrollCorner.Parent = questScroll
+
+local questList = Instance.new("UIListLayout")
+questList.Padding = UDim.new(0, 10)
+questList.Parent = questScroll
+
+-- ═══════════════════════════════════════════════════════════
+-- HÀM CẬP NHẬT UI
+-- ═══════════════════════════════════════════════════════════
+
+local function updateMoneyDisplay()
+	moneyLabel.Text = "💰 " .. formatNumber(gameData.money)
+end
+
+local function updateFishDisplay()
+	if gameData.currentFish then
+		local fish = gameData.currentFish
+		fishNameLabel.Text = "🐟 " .. fish.name
+		fishWeightLabel.Text = "⚖️ Cân nặng: " .. fish.weight .. " kg"
+		fishKgLabel.Text = "🎣 Yêu cầu: " .. (fish.kg or 0) .. " kg"
+		
+		local hpPercent = fish.currentHp / fish.maxHp
+		hpBarFill.Size = UDim2.new(hpPercent, 0, 1, 0)
+		hpTextLabel.Text = "HP: " .. formatNumber(fish.currentHp) .. "/" .. formatNumber(fish.maxHp)
+		
+		if fish.type == "special" then
+			fishNameLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
+		elseif fish.type == "legendary" then
+			fishNameLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+		elseif fish.type == "giant" then
+			fishNameLabel.TextColor3 = Color3.fromRGB(255, 150, 0)
+		else
+			fishNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		end
+	end
+end
+
+local function calculateTotalDamage()
+	local rodData = nil
+	for _, rod in ipairs(rodDatabase) do
+		if rod.name == gameData.equippedRod then
+			rodData = rod
+			break
+		end
+	end
+	
+	local rodDamage = rodData and rodData.damage or 10
+	local magicDamage = 0
+	
+	for _, magicName in ipairs(gameData.equippedMagic) do
+		for _, magic in ipairs(magicDatabase) do
+			if magic.name == magicName then
+				magicDamage = magicDamage + magic.damage
+				break
+			end
+		end
+	end
+	
+	local characterMultiplier = 1
+	for _, charName in ipairs(gameData.equippedCharacters) do
+		for _, char in ipairs(characterDatabase) do
+			if char.name == charName then
+				characterMultiplier = characterMultiplier * char.multiplier
+				break
+			end
+		end
+	end
+	
+	local totalDamage = (rodDamage + magicDamage) * characterMultiplier
+	damageLabel.Text = "⚔️ Dame: " .. formatNumber(totalDamage)
+	
+	return totalDamage
+end
+
+local function spawnNewFish()
+	local randomFish = fishDatabase[math.random(1, #fishDatabase)]
+	gameData.currentFish = {
+		name = randomFish.name,
+		maxHp = randomFish.hp,
+		currentHp = randomFish.hp,
+		weight = randomFish.weight,
+		money = randomFish.money,
+		type = randomFish.type,
+		kg = randomFish.kg or 0,
+		sellPrice = randomFish.sellPrice or randomFish.money * 2
+	}
+	updateFishDisplay()
+	updateMiniMap()
+end
+
+local function updateMiniMap()
+	for _, child in ipairs(miniMapScroll:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+	
+	for _, fish in ipairs(fishDatabase) do
+		local item = Instance.new("Frame")
+		item.Size = UDim2.new(1, 0, 0, 30)
+		item.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+		item.Parent = miniMapScroll
+		
+		local itemCorner = Instance.new("UICorner")
+		itemCorner.CornerRadius = UDim.new(0, 8)
+		itemCorner.Parent = item
+		
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Size = UDim2.new(0.5, 0, 1, 0)
+		nameLabel.Position = UDim2.new(0.02, 0, 0, 0)
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Text = fish.name
+		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+		nameLabel.Font = Enum.Font.Gotham
+		nameLabel.TextSize = 11
+		nameLabel.Parent = item
+		
+		if fish.type == "special" then
+			nameLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
+		elseif fish.type == "legendary" then
+			nameLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+		elseif fish.type == "giant" then
+			nameLabel.TextColor3 = Color3.fromRGB(255, 150, 0)
+		else
+			nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		end
+		
+		local weightLabel = Instance.new("TextLabel")
+		weightLabel.Size = UDim2.new(0.25, 0, 1, 0)
+		weightLabel.Position = UDim2.new(0.53, 0, 0, 0)
+		weightLabel.BackgroundTransparency = 1
+		weightLabel.Text = fish.weight .. "kg"
+		weightLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		weightLabel.Font = Enum.Font.Gotham
+		weightLabel.TextSize = 10
+		weightLabel.Parent = item
+		
+		local kgLabel = Instance.new("TextLabel")
+		kgLabel.Size = UDim2.new(0.2, 0, 1, 0)
+		kgLabel.Position = UDim2.new(0.78, 0, 0, 0)
+		kgLabel.BackgroundTransparency = 1
+		kgLabel.Text = "🎣" .. (fish.kg or 0)
+		kgLabel.TextColor3 = Color3.fromRGB(255, 150, 50)
+		kgLabel.Font = Enum.Font.Gotham
+		kgLabel.TextSize = 10
+		kgLabel.Parent = item
+	end
+	
+	miniMapScroll.CanvasSize = UDim2.new(0, 0, 0, miniMapList.AbsoluteContentSize.Y)
+end
+
+local function updateEquippedCharacters()
+	for i = 1, 3 do
+		local slot = equippedSlots[i]
+		if gameData.equippedCharacters[i] then
+			local charName = gameData.equippedCharacters[i]
+			slot.label.Text = charName
+			slot.label.TextColor3 = Color3.fromRGB(255, 215, 0)
+			
+			for _, char in ipairs(characterDatabase) do
+				if char.name == charName then
+					slot.hpLabel.Text = "❤️ HP: " .. char.hp .. " | x" .. char.multiplier
+					break
+				end
+			end
+		else
+			slot.label.Text = "Trống"
+			slot.label.TextColor3 = Color3.fromRGB(150, 150, 150)
+			slot.hpLabel.Text = ""
+		end
+	end
+	calculateTotalDamage()
+end
+
+local function updateEquippedRod()
+	equippedRodLabel.Text = "🎣 CẦN ĐANG DÙNG: " .. gameData.equippedRod
+	
+	for _, rod in ipairs(rodDatabase) do
+		if rod.name == gameData.equippedRod then
+			equippedRodStats.Text = "⚔️ Dame: " .. formatNumber(rod.damage) .. " | 🛡️ Độ bền: " .. formatNumber(rod.durability) .. " | 🎣 Max: " .. formatNumber(rod.maxKg) .. "kg"
+			break
+		end
+	end
+	calculateTotalDamage()
+end
+
+local function updateEquippedMagic()
+	for i = 1, 4 do
+		local slot = magicSlots[i]
+		if gameData.equippedMagic[i] then
+			local magicName = gameData.equippedMagic[i]
+			slot.label.Text = magicName
+			slot.label.TextColor3 = Color3.fromRGB(100, 200, 255)
+			
+			for _, magic in ipairs(magicDatabase) do
+				if magic.name == magicName then
+					slot.damageLabel.Text = "⚔️ " .. formatNumber(magic.damage)
+					break
+				end
+			end
+			
+			slot.frame.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+		else
+			slot.label.Text = "Trống"
+			slot.label.TextColor3 = Color3.fromRGB(100, 100, 120)
+			slot.damageLabel.Text = ""
+			slot.frame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+		end
+	end
+	calculateTotalDamage()
+end
+
+local function updateInventory()
+	for _, child in ipairs(inventoryScroll:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+	
+	for fishName, count in pairs(gameData.inventory) do
+		if count > 0 then
+			local fishData = nil
+			for _, fish in ipairs(fishDatabase) do
+				if fish.name == fishName then
+					fishData = fish
+					break
+				end
+			end
+			
+			if fishData then
+				local item = Instance.new("Frame")
+				item.Size = UDim2.new(1, -10, 0, 80)
+				item.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+				item.Parent = inventoryScroll
+				
+				local itemCorner = Instance.new("UICorner")
+				itemCorner.CornerRadius = UDim.new(0, 12)
+				itemCorner.Parent = item
+				
+				local nameLabel = Instance.new("TextLabel")
+				nameLabel.Size = UDim2.new(0.3, 0, 0.35, 0)
+				nameLabel.Position = UDim2.new(0.03, 0, 0.1, 0)
+				nameLabel.BackgroundTransparency = 1
+				nameLabel.Text = fishData.name
+				nameLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+				nameLabel.Font = Enum.Font.GothamBold
+				nameLabel.TextScaled = true
+				nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+				nameLabel.Parent = item
+				
+				local countLabel = Instance.new("TextLabel")
+				countLabel.Size = UDim2.new(0.3, 0, 0.25, 0)
+				countLabel.Position = UDim2.new(0.03, 0, 0.5, 0)
+				countLabel.BackgroundTransparency = 1
+				countLabel.Text = "Số lượng: " .. count
+				countLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+				countLabel.Font = Enum.Font.Gotham
+				countLabel.TextSize = 14
+				countLabel.TextXAlignment = Enum.TextXAlignment.Left
+				countLabel.Parent = item
+				
+				local priceLabel = Instance.new("TextLabel")
+				priceLabel.Size = UDim2.new(0.3, 0, 0.25, 0)
+				priceLabel.Position = UDim2.new(0.03, 0, 0.7, 0)
+				priceLabel.BackgroundTransparency = 1
+				priceLabel.Text = "Giá: 💰 " .. formatNumber(fishData.sellPrice)
+				priceLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+				priceLabel.Font = Enum.Font.Gotham
+				priceLabel.TextSize = 13
+				priceLabel.TextXAlignment = Enum.TextXAlignment.Left
+				priceLabel.Parent = item
+				
+				local sellButton = Instance.new("TextButton")
+				sellButton.Size = UDim2.new(0.2, 0, 0.4, 0)
+				sellButton.Position = UDim2.new(0.4, 0, 0.15, 0)
+				sellButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+				sellButton.Text = "BÁN 1"
+				sellButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+				sellButton.Font = Enum.Font.GothamBold
+				sellButton.TextScaled = true
+				sellButton.Parent = item
+				
+				local sellCorner = Instance.new("UICorner")
+				sellCorner.CornerRadius = UDim.new(0, 10)
+				sellCorner.Parent = sellButton
+				
+				local sellAllButton = Instance.new("TextButton")
+				sellAllButton.Size = UDim2.new(0.25, 0, 0.4, 0)
+				sellAllButton.Position = UDim2.new(0.65, 0, 0.15, 0)
+				sellAllButton.BackgroundColor3 = Color3.fromRGB(100, 150, 50)
+				sellAllButton.Text = "BÁN TẤT CẢ"
+				sellAllButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+				sellAllButton.Font = Enum.Font.GothamBold
+				sellAllButton.TextScaled = true
+				sellAllButton.Parent = item
+				
+				local sellAllCorner = Instance.new("UICorner")
+				sellAllCorner.CornerRadius = UDim.new(0, 10)
+				sellAllCorner.Parent = sellAllButton
+				
+				sellButton.MouseButton1Click:Connect(function()
+					if gameData.inventory[fishName] and gameData.inventory[fishName] > 0 then
+						gameData.inventory[fishName] = gameData.inventory[fishName] - 1
+						gameData.money = gameData.money + fishData.sellPrice
+						updateMoneyDisplay()
+						updateInventory()
+						
+						createTween(sellButton, {BackgroundColor3 = Color3.fromRGB(100, 255, 100)}, 0.2):Play()
+						wait(0.2)
+						createTween(sellButton, {BackgroundColor3 = Color3.fromRGB(50, 150, 50)}, 0.2):Play()
+					end
+				end)
+				
+				sellAllButton.MouseButton1Click:Connect(function()
+					if gameData.inventory[fishName] and gameData.inventory[fishName] > 0 then
+						local totalPrice = gameData.inventory[fishName] * fishData.sellPrice
+						gameData.money = gameData.money + totalPrice
+						gameData.inventory[fishName] = 0
+						updateMoneyDisplay()
+						updateInventory()
+						
+						createTween(sellAllButton, {BackgroundColor3 = Color3.fromRGB(100, 255, 100)}, 0.2):Play()
+						wait(0.2)
+						createTween(sellAllButton, {BackgroundColor3 = Color3.fromRGB(100, 150, 50)}, 0.2):Play()
+					end
+				end)
+			end
+		end
+	end
+	
+	inventoryScroll.CanvasSize = UDim2.new(0, 0, 0, inventoryList.AbsoluteContentSize.Y)
+end
+
+local function updateQuests()
+	for _, child in ipairs(questScroll:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+	
+	for _, char in ipairs(characterDatabase) do
+		if char.quest then
+			local isCompleted = false
+			for _, completed in ipairs(gameData.questsCompleted) do
+				if completed == char.name then
+					isCompleted = true
+					break
+				end
+			end
+			
+			local isOwned = false
+			for _, owned in ipairs(gameData.ownedCharacters) do
+				if owned == char.name then
+					isOwned = true
+					break
+				end
+			end
+			
+			if not isCompleted and not isOwned then
+				local item = Instance.new("Frame")
+				item.Size = UDim2.new(1, -10, 0, 100)
+				item.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+				item.Parent = questScroll
+				
+				local itemCorner = Instance.new("UICorner")
+				itemCorner.CornerRadius = UDim.new(0, 12)
+				itemCorner.Parent = item
+				
+				local itemStroke = Instance.new("UIStroke")
+				itemStroke.Color = Color3.fromRGB(255, 215, 0)
+				itemStroke.Thickness = 2
+				itemStroke.Parent = item
+				
+				local nameLabel = Instance.new("TextLabel")
+				nameLabel.Size = UDim2.new(0.5, 0, 0.25, 0)
+				nameLabel.Position = UDim2.new(0.03, 0, 0.05, 0)
+				nameLabel.BackgroundTransparency = 1
+				nameLabel.Text = "🎁 " .. char.name
+				nameLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+				nameLabel.Font = Enum.Font.GothamBold
+				nameLabel.TextScaled = true
+				nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+				nameLabel.Parent = item
+				
+				local questLabel = Instance.new("TextLabel")
+				questLabel.Size = UDim2.new(0.9, 0, 0.2, 0)
+				questLabel.Position = UDim2.new(0.03, 0, 0.32, 0)
+				questLabel.BackgroundTransparency = 1
+				questLabel.Text = "📜 Nhiệm vụ: Đánh bại " .. char.kills .. " con " .. char.quest
+				questLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+				questLabel.Font = Enum.Font.Gotham
+				questLabel.TextSize = 14
+				questLabel.TextXAlignment = Enum.TextXAlignment.Left
+				questLabel.Parent = item
+				
+				local progressLabel = Instance.new("TextLabel")
+				progressLabel.Size = UDim2.new(0.9, 0, 0.2, 0)
+				progressLabel.Position = UDim2.new(0.03, 0, 0.55, 0)
+				progressLabel.BackgroundTransparency = 1
+				local currentKills = gameData.fishKills[char.quest] or 0
+				progressLabel.Text = "⚔️ Tiến độ: " .. currentKills .. "/" .. char.kills
+				progressLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+				progressLabel.Font = Enum.Font.Gotham
+				progressLabel.TextSize = 14
+				progressLabel.TextXAlignment = Enum.TextXAlignment.Left
+				progressLabel.Parent = item
+				
+				local rewardLabel = Instance.new("TextLabel")
+				rewardLabel.Size = UDim2.new(0.9, 0, 0.18, 0)
+				rewardLabel.Position = UDim2.new(0.03, 0, 0.77, 0)
+				rewardLabel.BackgroundTransparency = 1
+				rewardLabel.Text = "🎁 Phần thưởng: x" .. char.multiplier .. " Dame | HP: " .. char.hp
+				rewardLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+				rewardLabel.Font = Enum.Font.GothamBold
+				rewardLabel.TextSize = 13
+				rewardLabel.TextXAlignment = Enum.TextXAlignment.Left
+				rewardLabel.Parent = item
+			end
+		end
+	end
+	
+	questScroll.CanvasSize = UDim2.new(0, 0, 0, questList.AbsoluteContentSize.Y)
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- TẠO SHOP ITEMS
+-- ═══════════════════════════════════════════════════════════
+
+-- Character Shop Items
+for _, char in ipairs(characterDatabase) do
+	local item = Instance.new("Frame")
+	item.Size = UDim2.new(1, -10, 0, 80)
+	item.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+	item.Parent = charShopScroll
+	
+	local itemCorner = Instance.new("UICorner")
+	itemCorner.CornerRadius = UDim.new(0, 12)
+	itemCorner.Parent = item
+	
+	local itemStroke = Instance.new("UIStroke")
+	itemStroke.Color = Color3.fromRGB(100, 100, 120)
+	itemStroke.Thickness = 1
+	itemStroke.Parent = item
+	
+	if char.quest then
+		itemStroke.Color = Color3.fromRGB(255, 215, 0)
+		itemStroke.Thickness = 2
+	end
+	
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(0.35, 0, 0.35, 0)
+	nameLabel.Position = UDim2.new(0.03, 0, 0.1, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = char.name
+	nameLabel.TextColor3 = char.quest and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(255, 215, 0)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextScaled = true
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = item
+	
+	local statsLabel = Instance.new("TextLabel")
+	statsLabel.Size = UDim2.new(0.35, 0, 0.25, 0)
+	statsLabel.Position = UDim2.new(0.03, 0, 0.5, 0)
+	statsLabel.BackgroundTransparency = 1
+	statsLabel.Text = "⚔️ x" .. char.multiplier .. " | ❤️ HP: " .. char.hp
+	statsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	statsLabel.Font = Enum.Font.Gotham
+	statsLabel.TextSize = 14
+	statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+	statsLabel.Parent = item
+	
+	local costLabel = Instance.new("TextLabel")
+	costLabel.Size = UDim2.new(0.25, 0, 0.25, 0)
+	costLabel.Position = UDim2.new(0.03, 0, 0.7, 0)
+	costLabel.BackgroundTransparency = 1
+	if char.quest then
+		costLabel.Text = "📜 Nhiệm vụ"
+	else
+		costLabel.Text = "💰 " .. formatNumber(char.cost)
+	end
+	costLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+	costLabel.Font = Enum.Font.Gotham
+	costLabel.TextSize = 13
+	costLabel.TextXAlignment = Enum.TextXAlignment.Left
+	costLabel.Parent = item
+	
+	local buyButton = Instance.new("TextButton")
+	buyButton.Size = UDim2.new(0.2, 0, 0.5, 0)
+	buyButton.Position = UDim2.new(0.45, 0, 0.25, 0)
+	buyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+	buyButton.Text = "MUA"
+	buyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	buyButton.Font = Enum.Font.GothamBold
+	buyButton.TextScaled = true
+	buyButton.Parent = item
+	
+	local buyCorner = Instance.new("UICorner")
+	buyCorner.CornerRadius = UDim.new(0, 10)
+	buyCorner.Parent = buyButton
+	
+	local equipButton = Instance.new("TextButton")
+	equipButton.Size = UDim2.new(0.25, 0, 0.5, 0)
+	equipButton.Position = UDim2.new(0.7, 0, 0.25, 0)
+	equipButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
+	equipButton.Text = "TRANG BỊ"
+	equipButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	equipButton.Font = Enum.Font.GothamBold
+	equipButton.TextScaled = true
+	equipButton.Parent = item
+	
+	local equipCorner = Instance.new("UICorner")
+	equipCorner.CornerRadius = UDim.new(0, 10)
+	equipCorner.Parent = equipButton
+	
+	buyButton.MouseButton1Click:Connect(function()
+		local isOwned = false
+		for _, owned in ipairs(gameData.ownedCharacters) do
+			if owned == char.name then
+				isOwned = true
+				break
+			end
+		end
+		
+		if isOwned then
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			shakeEffect(buyButton)
+		elseif char.quest then
+			shakeEffect(buyButton)
+		elseif gameData.money >= char.cost then
+			gameData.money = gameData.money - char.cost
+			table.insert(gameData.ownedCharacters, char.name)
+			updateMoneyDisplay()
+			
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			
+			createTween(item, {BackgroundColor3 = Color3.fromRGB(50, 200, 50)}, 0.3):Play()
+			wait(0.3)
+			createTween(item, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.3):Play()
+		else
+			buyButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+			shakeEffect(buyButton)
+			wait(0.3)
+			buyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+		end
+	end)
+	
+	equipButton.MouseButton1Click:Connect(function()
+		local isOwned = false
+		for _, owned in ipairs(gameData.ownedCharacters) do
+			if owned == char.name then
+				isOwned = true
+				break
+			end
+		end
+		
+		if not isOwned then
+			shakeEffect(equipButton)
+			return
+		end
+		
+		local isEquipped = false
+		for i, equipped in ipairs(gameData.equippedCharacters) do
+			if equipped == char.name then
+				table.remove(gameData.equippedCharacters, i)
+				isEquipped = true
+				equipButton.Text = "TRANG BỊ"
+				equipButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
+				break
+			end
+		end
+		
+		if not isEquipped then
+			if #gameData.equippedCharacters < 3 then
+				table.insert(gameData.equippedCharacters, char.name)
+				equipButton.Text = "GỠ BỎ"
+				equipButton.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
+			else
+				shakeEffect(equipButton)
+			end
+		end
+		
+		updateEquippedCharacters()
+	end)
+	
+	for _, owned in ipairs(gameData.ownedCharacters) do
+		if owned == char.name then
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			break
+		end
+	end
+end
+
+charShopScroll.CanvasSize = UDim2.new(0, 0, 0, charShopList.AbsoluteContentSize.Y)
+
+-- Rod Shop Items
+for _, rod in ipairs(rodDatabase) do
+	local item = Instance.new("Frame")
+	item.Size = UDim2.new(1, -10, 0, 80)
+	item.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+	item.Parent = rodShopScroll
+	
+	local itemCorner = Instance.new("UICorner")
+	itemCorner.CornerRadius = UDim.new(0, 12)
+	itemCorner.Parent = item
+	
+	local itemStroke = Instance.new("UIStroke")
+	itemStroke.Color = Color3.fromRGB(100, 100, 120)
+	itemStroke.Thickness = 1
+	itemStroke.Parent = item
+	
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(0.3, 0, 0.35, 0)
+	nameLabel.Position = UDim2.new(0.03, 0, 0.1, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = rod.name
+	nameLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextScaled = true
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = item
+	
+	local statsLabel = Instance.new("TextLabel")
+	statsLabel.Size = UDim2.new(0.5, 0, 0.25, 0)
+	statsLabel.Position = UDim2.new(0.03, 0, 0.5, 0)
+	statsLabel.BackgroundTransparency = 1
+	statsLabel.Text = "⚔️ " .. formatNumber(rod.damage) .. " | 🛡️ " .. formatNumber(rod.durability) .. " | 🎣 " .. formatNumber(rod.maxKg) .. "kg"
+	statsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	statsLabel.Font = Enum.Font.Gotham
+	statsLabel.TextSize = 13
+	statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+	statsLabel.Parent = item
+	
+	local costLabel = Instance.new("TextLabel")
+	costLabel.Size = UDim2.new(0.25, 0, 0.25, 0)
+	costLabel.Position = UDim2.new(0.03, 0, 0.7, 0)
+	costLabel.BackgroundTransparency = 1
+	costLabel.Text = "💰 " .. formatNumber(rod.cost)
+	costLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+	costLabel.Font = Enum.Font.Gotham
+	costLabel.TextSize = 13
+	costLabel.TextXAlignment = Enum.TextXAlignment.Left
+	costLabel.Parent = item
+	
+	local buyButton = Instance.new("TextButton")
+	buyButton.Size = UDim2.new(0.2, 0, 0.5, 0)
+	buyButton.Position = UDim2.new(0.5, 0, 0.25, 0)
+	buyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+	buyButton.Text = "MUA"
+	buyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	buyButton.Font = Enum.Font.GothamBold
+	buyButton.TextScaled = true
+	buyButton.Parent = item
+	
+	local buyCorner = Instance.new("UICorner")
+	buyCorner.CornerRadius = UDim.new(0, 10)
+	buyCorner.Parent = buyButton
+	
+	local equipButton = Instance.new("TextButton")
+	equipButton.Size = UDim2.new(0.2, 0, 0.5, 0)
+	equipButton.Position = UDim2.new(0.75, 0, 0.25, 0)
+	equipButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
+	equipButton.Text = "DÙNG"
+	equipButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	equipButton.Font = Enum.Font.GothamBold
+	equipButton.TextScaled = true
+	equipButton.Parent = item
+	
+	local equipCorner = Instance.new("UICorner")
+	equipCorner.CornerRadius = UDim.new(0,10)
+	equipCorner.Parent = equipButton
+	
+	buyButton.MouseButton1Click:Connect(function()
+		local isOwned = false
+		for _, owned in ipairs(gameData.ownedRods) do
+			if owned == rod.name then
+				isOwned = true
+				break
+			end
+		end
+		
+		if isOwned then
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			shakeEffect(buyButton)
+		elseif gameData.money >= rod.cost then
+			gameData.money = gameData.money - rod.cost
+			table.insert(gameData.ownedRods, rod.name)
+			updateMoneyDisplay()
+			
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			
+			createTween(item, {BackgroundColor3 = Color3.fromRGB(50, 200, 50)}, 0.3):Play()
+			wait(0.3)
+			createTween(item, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.3):Play()
+		else
+			buyButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+			shakeEffect(buyButton)
+			wait(0.3)
+			buyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+		end
+	end)
+	
+	equipButton.MouseButton1Click:Connect(function()
+		local isOwned = false
+		for _, owned in ipairs(gameData.ownedRods) do
+			if owned == rod.name then
+				isOwned = true
+				break
+			end
+		end
+		
+		if isOwned then
+			gameData.equippedRod = rod.name
+			updateEquippedRod()
+			createTween(equipButton, {BackgroundColor3 = Color3.fromRGB(50, 200, 50)}, 0.2):Play()
+			wait(0.2)
+			createTween(equipButton, {BackgroundColor3 = Color3.fromRGB(100, 100, 200)}, 0.2):Play()
+		else
+			shakeEffect(equipButton)
+		end
+	end)
+	
+	for _, owned in ipairs(gameData.ownedRods) do
+		if owned == rod.name then
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			break
+		end
+	end
+end
+
+rodShopScroll.CanvasSize = UDim2.new(0, 0, 0, rodShopList.AbsoluteContentSize.Y)
+
+-- Magic Shop Items
+for _, magic in ipairs(magicDatabase) do
+	local item = Instance.new("Frame")
+	item.Size = UDim2.new(1, -10, 0, 80)
+	item.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+	item.Parent = magicShopScroll
+	
+	local itemCorner = Instance.new("UICorner")
+	itemCorner.CornerRadius = UDim.new(0, 12)
+	itemCorner.Parent = item
+	
+	local itemStroke = Instance.new("UIStroke")
+	itemStroke.Color = Color3.fromRGB(100, 100, 120)
+	itemStroke.Thickness = 1
+	itemStroke.Parent = item
+	
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(0.4, 0, 0.35, 0)
+	nameLabel.Position = UDim2.new(0.03, 0, 0.1, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = magic.name
+	nameLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextScaled = true
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = item
+	
+	local damageLabel = Instance.new("TextLabel")
+	damageLabel.Size = UDim2.new(0.3, 0, 0.25, 0)
+	damageLabel.Position = UDim2.new(0.03, 0, 0.5, 0)
+	damageLabel.BackgroundTransparency = 1
+	damageLabel.Text = "⚔️ Dame: " .. formatNumber(magic.damage)
+	damageLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	damageLabel.Font = Enum.Font.Gotham
+	damageLabel.TextSize = 14
+	damageLabel.TextXAlignment = Enum.TextXAlignment.Left
+	damageLabel.Parent = item
+	
+	local costLabel = Instance.new("TextLabel")
+	costLabel.Size = UDim2.new(0.3, 0, 0.25, 0)
+	costLabel.Position = UDim2.new(0.03, 0, 0.7, 0)
+	costLabel.BackgroundTransparency = 1
+	costLabel.Text = "💰 " .. formatNumber(magic.cost)
+	costLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+	costLabel.Font = Enum.Font.Gotham
+	costLabel.TextSize = 13
+	costLabel.TextXAlignment = Enum.TextXAlignment.Left
+	costLabel.Parent = item
+	
+	local buyButton = Instance.new("TextButton")
+	buyButton.Size = UDim2.new(0.2, 0, 0.5, 0)
+	buyButton.Position = UDim2.new(0.5, 0, 0.25, 0)
+	buyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+	buyButton.Text = "MUA"
+	buyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	buyButton.Font = Enum.Font.GothamBold
+	buyButton.TextScaled = true
+	buyButton.Parent = item
+	
+	local buyCorner = Instance.new("UICorner")
+	buyCorner.CornerRadius = UDim.new(0, 10)
+	buyCorner.Parent = buyButton
+	
+	local equipButton = Instance.new("TextButton")
+	equipButton.Size = UDim2.new(0.2, 0, 0.5, 0)
+	equipButton.Position = UDim2.new(0.75, 0, 0.25, 0)
+	equipButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
+	equipButton.Text = "TRANG BỊ"
+	equipButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	equipButton.Font = Enum.Font.GothamBold
+	equipButton.TextScaled = true
+	equipButton.Parent = item
+	
+	local equipCorner = Instance.new("UICorner")
+	equipCorner.CornerRadius = UDim.new(0, 10)
+	equipCorner.Parent = equipButton
+	
+	buyButton.MouseButton1Click:Connect(function()
+		local isOwned = false
+		for _, owned in ipairs(gameData.ownedMagic) do
+			if owned == magic.name then
+				isOwned = true
+				break
+			end
+		end
+		
+		if isOwned then
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			shakeEffect(buyButton)
+		elseif gameData.money >= magic.cost then
+			gameData.money = gameData.money - magic.cost
+			table.insert(gameData.ownedMagic, magic.name)
+			updateMoneyDisplay()
+			
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			
+			createTween(item, {BackgroundColor3 = Color3.fromRGB(50, 200, 50)}, 0.3):Play()
+			wait(0.3)
+			createTween(item, {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}, 0.3):Play()
+		else
+			buyButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+			shakeEffect(buyButton)
+			wait(0.3)
+			buyButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+		end
+	end)
+	
+	equipButton.MouseButton1Click:Connect(function()
+		local isOwned = false
+		for _, owned in ipairs(gameData.ownedMagic) do
+			if owned == magic.name then
+				isOwned = true
+				break
+			end
+		end
+		
+		if not isOwned then
+			shakeEffect(equipButton)
+			return
+		end
+		
+		local isEquipped = false
+		for i, equipped in ipairs(gameData.equippedMagic) do
+			if equipped == magic.name then
+				table.remove(gameData.equippedMagic, i)
+				isEquipped = true
+				equipButton.Text = "TRANG BỊ"
+				equipButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
+				break
+			end
+		end
+		
+		if not isEquipped then
+			if #gameData.equippedMagic < 4 then
+				table.insert(gameData.equippedMagic, magic.name)
+				equipButton.Text = "GỠ BỎ"
+				equipButton.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
+			else
+				shakeEffect(equipButton)
+			end
+		end
+		
+		updateEquippedMagic()
+	end)
+	
+	for _, owned in ipairs(gameData.ownedMagic) do
+		if owned == magic.name then
+			buyButton.Text = "OWNER"
+			buyButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+			break
+		end
+	end
+end
+
+magicShopScroll.CanvasSize = UDim2.new(0, 0, 0, magicShopList.AbsoluteContentSize.Y)
+
+-- ═══════════════════════════════════════════════════════════
+-- LOGIC CÂU CÁ
+-- ═══════════════════════════════════════════════════════════
+
+local function checkQuestCompletion(fishName)
+	for _, char in ipairs(characterDatabase) do
+		if char.quest and char.quest == fishName then
+			local currentKills = gameData.fishKills[fishName] or 0
+			
+			if currentKills >= char.kills then
+				local alreadyCompleted = false
+				for _, completed in ipairs(gameData.questsCompleted) do
+					if completed == char.name then
+						alreadyCompleted = true
+						break
+					end
+				end
+				
+				local alreadyOwned = false
+				for _, owned in ipairs(gameData.ownedCharacters) do
+					if owned == char.name then
+						alreadyOwned = true
+						break
+					end
+				end
+				
+				if not alreadyCompleted and not alreadyOwned then
+					table.insert(gameData.questsCompleted, char.name)
+					table.insert(gameData.ownedCharacters, char.name)
+					
+					local questPopup = Instance.new("Frame")
+					questPopup.Size = UDim2.new(0.4, 0, 0.15, 0)
+					questPopup.Position = UDim2.new(0.3, 0, 0.4, 0)
+					questPopup.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+					questPopup.Parent = screenGui
+					
+					local popupCorner = Instance.new("UICorner")
+					popupCorner.CornerRadius = UDim.new(0, 15)
+					popupCorner.Parent = questPopup
+					
+					local popupStroke = Instance.new("UIStroke")
+					popupStroke.Color = Color3.fromRGB(255, 215, 0)
+					popupStroke.Thickness = 3
+					popupStroke.Parent = questPopup
+					
+					local popupLabel = Instance.new("TextLabel")
+					popupLabel.Size = UDim2.new(1, 0, 1, 0)
+					popupLabel.BackgroundTransparency = 1
+					popupLabel.Text = "🎉 HOÀN THÀNH NHIỆM VỤ!\n✨ Nhận: " .. char.name
+					popupLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+					popupLabel.Font = Enum.Font.GothamBold
+					popupLabel.TextScaled = true
+					popupLabel.Parent = questPopup
+					
+					wait(3)
+					questPopup:Destroy()
+					updateQuests()
+				end
+			end
+		end
+	end
+end
+
+local function damageCurrentFish()
+	if not gameData.currentFish then
+		return
+	end
+	
+	local totalDamage = calculateTotalDamage()
+	gameData.currentFish.currentHp = gameData.currentFish.currentHp - totalDamage
+	
+	createTween(fishButton, {Rotation = 360}, 0.5):Play()
+	createTween(fishButton, {Size = UDim2.new(0.27, 0, 0.27, 0)}, 0.1):Play()
+	wait(0.1)
+	createTween(fishButton, {Size = UDim2.new(0.25, 0, 0.25, 0)}, 0.1):Play()
+	fishButton.Rotation = 0
+	
+	local rodData = nil
+	for _, rod in ipairs(rodDatabase) do
+		if rod.name == gameData.equippedRod then
+			rodData = rod
+			break
+		end
+	end
+	
+	if rodData and gameData.currentFish.kg > rodData.maxKg then
+		fishNameLabel.Text = "⚠️ CẦN GÃY! Cá cần " .. gameData.currentFish.kg .. "kg!"
+		fishNameLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+		shakeEffect(fishDisplayFrame)
+		wait(1)
+		spawnNewFish()
+		return
+	end
+	
+	if gameData.currentFish.currentHp <= 0 then
+		local earnedMoney = gameData.currentFish.money
+		gameData.money = gameData.money + earnedMoney
+		
+		local fishName = gameData.currentFish.name
+		if not gameData.inventory[fishName] then
+			gameData.inventory[fishName] = 0
+		end
+		gameData.inventory[fishName] = gameData.inventory[fishName] + 1
+		
+		if not gameData.fishKills[fishName] then
+			gameData.fishKills[fishName] = 0
+		end
+		gameData.fishKills[fishName] = gameData.fishKills[fishName] + 1
+		
+		checkQuestCompletion(fishName)
+		
+		for _, charName in ipairs(gameData.equippedCharacters) do
+			if charName == "Alium" and fishName == "Alium" then
+				fishNameLabel.Text = "✨ Alium hồi phục năng lượng!"
+				break
+			end
+		end
+		
+		fishNameLabel.Text = "🎉 BẮT ĐƯỢC: " .. gameData.currentFish.name
+		fishNameLabel.TextColor3 = Color3.fromRGB(50, 255, 50)
+		
+		local moneyPopup = Instance.new("TextLabel")
+		moneyPopup.Size = UDim2.new(0.3, 0, 0.1, 0)
+		moneyPopup.Position = UDim2.new(0.35, 0, 0.45, 0)
+		moneyPopup.BackgroundTransparency = 1
+		moneyPopup.Text = "+💰 " .. formatNumber(earnedMoney)
+		moneyPopup.TextColor3 = Color3.fromRGB(255, 255, 0)
+		moneyPopup.Font = Enum.Font.GothamBold
+		moneyPopup.TextScaled = true
+		moneyPopup.Parent = fishingFrame
+		
+		createTween(moneyPopup, {Position = UDim2.new(0.35, 0, 0.25, 0)}, 1):Play()
+		createTween(moneyPopup, {TextTransparency = 1}, 1):Play()
+		
+		wait(1)
+		moneyPopup:Destroy()
+		
+		updateMoneyDisplay()
+		updateInventory()
+		spawnNewFish()
+	else
+		updateFishDisplay()
+	end
+end
+
+fishButton.MouseButton1Click:Connect(function()
+	damageCurrentFish()
+end)
+
+local isHolding = false
+
+fishButton.MouseButton1Down:Connect(function()
+	isHolding = true
+	wait(0.5)
+	
+	while isHolding do
+		damageCurrentFish()
+		wait(0.3)
+	end
+end)
+
+fishButton.MouseButton1Up:Connect(function()
+	isHolding = false
+end)
+
+-- ═══════════════════════════════════════════════════════════
+-- NAVIGATION LOGIC
+-- ═══════════════════════════════════════════════════════════
+
+for tabName, button in pairs(tabButtons) do
+	button.MouseButton1Click:Connect(function()
+		for _, frame in pairs(contentFrames) do
+			frame.Visible = false
+		end
+		
+		for name, btn in pairs(tabButtons) do
+			if name == tabName then
+				btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+			else
+				btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+			end
+		end
+		
+		contentFrames[tabName].Visible = true
+		
+		if tabName == "Cửa Hàng" then
+			updateInventory()
+		elseif tabName == "Nhiệm Vụ" then
+			updateQuests()
+		end
+		
+		createTween(button, {Size = UDim2.new(0.16, 0, 0.85, 0)}, 0.1):Play()
+		wait(0.1)
+		createTween(button, {Size = UDim2.new(0.15, 0, 0.8, 0)}, 0.1):Play()
+	end)
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- KHỞI ĐỘNG GAME
+-- ═══════════════════════════════════════════════════════════
+
+spawnNewFish()
+updateMoneyDisplay()
+updateEquippedCharacters()
+updateEquippedRod()
+updateEquippedMagic()
+updateInventory()
+updateQuests()
+
+tabButtons["Câu Cá"].BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+
+print("🎣 CÂU CÁ VẠN CÂN - PHIÊN BẢN MỞ RỘNG")
+print("=" .. string.rep("=", 60))
+print("✅ TÍNH NĂNG MỚI:")
+print("   🐟 41 loại cá (thường, khổng lồ, huyền thoại, đặc biệt)")
+print("   👥 30 nhân vật (11 shop + 14 nhiệm vụ + 5 đặc biệt)")
+print("   🎣 25 loại cần câu với chỉ số kg để câu cá")
+print("   ✨ 50 loại điếu pháp")
+print("   🏪 Cửa hàng bán cá với giá riêng")
+print("   📜 Hệ thống nhiệm vụ: Đánh bại cá để nhận nhân vật")
+print("   🎒 Túi đồ lưu trữ cá đã câu")
+print("   ⚖️ Cá có yêu cầu kg, cần không đủ sẽ gãy")
+print("")
+print("📊 THỐNG KÊ:")
+print("   - Cá: " .. #fishDatabase .. " loại")
+print("   - Nhân vật: " .. #characterDatabase .. " người")
+print("   - Cần câu: " .. #rodDatabase .. " loại")
+print("   - Điếu pháp: " .. #magicDatabase .. " loại")
+print("")
+print("🎮 HƯỚNG DẪN:")
+print("   1. Câu cá để kiếm tiền và thu thập cá")
+print("   2. Mua/nâng cấp cần câu để câu cá lớn hơn")
+print("   3. Hoàn thành nhiệm vụ để mở khóa nhân vật mạnh")
+print("   4. Bán cá ở Cửa Hàng để kiếm tiền")
+print("   5. Trang bị 3 nhân vật + 4 điếu pháp + 1 cần")
+print("   6. Dame = (Cần + Điếu) × Buff nhân vật")
+print("")
+print("🌟 NHIỆM VỤ MẪU:")
+print("   - Đánh bại 10 Cá Voi Xanh → Nhận Thần Biển Poseidon")
+print("   - Đánh bại 5 Rồng Biển Băng → Nhận Pháp Sư Băng")
+print("   - Đánh bại 1 Cá Vạn Cổ Đế Tôn → Nhận Vạn Cổ Đại Đế")
+print("")
+print("⚠️ CHÚ Ý:")
+print("   - Cá có yêu cầu kg, kiểm tra trước khi câu!")
+print("   - Cần câu gãy nếu câu cá quá nặng")
+print("   - Nhân vật nhiệm vụ KHÔNG thể mua bằng tiền")
+print("   - Bán cá để kiếm tiền nhanh hơn!")
+print("=" .. string.rep("=", 60))
+print("🚀 GAME SẴN SÀNG! Chúc bạn câu được nhiều cá khủng!")
